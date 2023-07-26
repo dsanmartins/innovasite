@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Proyecto Innova UACh</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Gráfico Línea Mediciones Innova</h1>
+    <div>
+        <label for="sensor-name">Nombre Estación:</label>
+        <select id="sensor-name">
+            <option value="">Estaciones</option>
+             <option value="Innova-1">Innova-1</option>
+        </select>
+        <label for="start-date">Fecha:</label>
+        <input type="date" id="selected-date">
+        <label for="half-day">Jornada:</label>
+        <select id="half-day">
+            <option value="">Seleccione Mitad</option>
+            <option value="first-half">Primera Mitad</option>
+            <option value="second-half">Segunda Mitad</option>
+        </select>
+        <label for="measure">Medida (Mayor igual):</label>
+        <input type="number" id="measure" step="0.01"  onkeydown='return false'>
+        <button id="filter-button">Aplicar Filtro</button>
+        <button id="clear-button">Borrar Filtro</button>
+    </div>
+    <canvas id="chart" width="400" height="200"></canvas>
+
+    <script>
+        $(document).ready(function() {
+            // Get the chart canvas
+            var ctx = document.getElementById('chart').getContext('2d');
+            $('#measure').val('0');
+
+            // Initialize the chart with empty data
+            var chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Measure',
+                        data: [],
+                        fill: false,
+                        borderColor: 'blue',
+                        tension: 0.1
+                    }]
+                }
+            });
+
+            // Function to update the chart data
+            function updateChart(data) {
+                var labels = [];
+                var measureData = [];
+
+                data.forEach(function(item) {
+                    var date = new Date(item[0] * 1000);
+                    var formattedDate = date.toISOString().slice(0, 10);
+                    var formattedTime = ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2);
+                    var label = formattedTime;
+                    labels.push(label);
+                    measureData.push(item[1]);
+                });
+
+                // Update the chart with the new data
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = measureData;
+                chart.update();
+            }
+
+            // Function to fetch data from the server
+            function fetchData(sensorName, startUnixtime, endUnixtime, measureThreshold) {
+
+
+                $.ajax({
+                    url: '/data',
+                    method: 'GET',
+                    data: {
+                        sensor_name: sensorName,
+                        start_unixtime: startUnixtime,
+                        end_unixtime: endUnixtime,
+                        measure_threshold: measureThreshold
+
+                    },
+                    success: function(response) {
+                        updateChart(response);
+                    }
+                });
+            }
+
+            // Apply filter button click event
+            $('#filter-button').click(function() {
+                var sensorName = $('#sensor-name').val();
+                var selectedDate = $('#selected-date').val();
+                var startDate = new Date(selectedDate);
+                var endDate = new Date(selectedDate);
+                var halfDayOption = $('#half-day').val();
+                var measureThreshold = parseFloat($('#measure').val());
+
+
+                if (sensorName && selectedDate && halfDayOption) {
+
+                    if (halfDayOption === 'first-half') {
+                         startDate.setHours(0, 0, 0);
+                         startDate.setDate(startDate.getDate()+1);
+                         endDate = new Date(startDate); // Clone startDate to avoid reference
+                         endDate.setHours(11, 59, 59);
+                    } else if (halfDayOption === 'second-half') {
+                        startDate.setHours(12, 0, 0);
+                        startDate.setDate(startDate.getDate()+1);
+                        endDate = new Date(startDate); // Clone startDate to avoid reference
+                        endDate.setHours(23, 59, 59);
+                    }else {
+                        startDate.setHours(0, 0, 0);
+                        endDate.setHours(23, 59, 59);
+                    }
+                     var startUnixtime = Math.floor(startDate.getTime() / 1000);
+                     var endUnixtime = Math.floor(endDate.getTime() / 1000);
+
+                    fetchData(sensorName, startUnixtime, endUnixtime, measureThreshold);
+                }
+                else
+                {
+                    alert('Seleccionar todos los campos');
+                }
+            });
+
+            // Clear filter button click event
+            $('#clear-button').click(function() {
+                $('#sensor-name').val('');
+                $('#selected-date').val('');
+                $('#half-day').val('');
+                $('#measure').val('0');
+                chart.data.labels = [];
+                chart.data.datasets[0].data = [];
+                chart.update();
+            });
+        });
+    </script>
+</body>
+</html>
