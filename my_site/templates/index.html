@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Proyecto Innova UACh</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- use version 0.20.0 -->
+    <script lang="javascript" src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
     <h1>Gráfico Línea Mediciones Innova</h1>
-    <div>
+    <div id="datosInnova">
         <label for="sensor-name">Nombre Estación:</label>
         <select id="sensor-name">
             <option value="">Estaciones</option>
@@ -25,11 +28,21 @@
         <input type="number" id="measure" step="0.01"  onkeydown='return false'>
         <button id="filter-button">Aplicar Filtro</button>
         <button id="clear-button">Borrar Filtro</button>
+        <button id="download-button">Descargar</button>
     </div>
     <canvas id="chart" width="400" height="200"></canvas>
+   
+    
+
 
     <script>
+        //Inicio de prueba
+        var downloadData = [];
+        var downloadDataJSON;
+        //Fin de pruebas
         $(document).ready(function() {
+
+            
             // Get the chart canvas
             var ctx = document.getElementById('chart').getContext('2d');
             $('#measure').val('0');
@@ -61,7 +74,24 @@
                     var label = formattedTime;
                     labels.push(label);
                     measureData.push(item[1]);
+
+                    //Inicio Prueba
+                    var createJSONwithDataMeasured = '{"station": "'+document.querySelector('#sensor-name').value+'","time":"'+label.toString()+'", "waterMeasured": "'+item[1].toString()+'"}';
+                    downloadData.push(createJSONwithDataMeasured);
+                    downloadDataJSON = "[";
+                    var cont = 0;
+                    for (let data of downloadData) {
+                        downloadDataJSON = downloadDataJSON+data;
+                        cont = cont + 1;
+                        if(cont < downloadData.length){
+                            downloadDataJSON = downloadDataJSON+", ";
+                        }
+                    }
+                    downloadDataJSON = downloadDataJSON+"]";
+                    //downloadData = JSON.parse(downloadData);
+                    //Fin Prueba
                 });
+
 
                 // Update the chart with the new data
                 chart.data.labels = labels;
@@ -89,8 +119,9 @@
                 });
             }
 
-            // Apply filter button click event
-            $('#filter-button').click(function() {
+
+            //Filter data with a button
+            function filterData(){
                 var sensorName = $('#sensor-name').val();
                 var selectedDate = $('#selected-date').val();
                 var startDate = new Date(selectedDate);
@@ -124,7 +155,46 @@
                 {
                     alert('Seleccionar todos los campos');
                 }
-            });
+            }
+
+            //Update data in the chart 
+            function updateData(){
+                var sensorName = $('#sensor-name').val();
+                var selectedDate = $('#selected-date').val();
+                var startDate = new Date(selectedDate);
+                var endDate = new Date(selectedDate);
+                var halfDayOption = $('#half-day').val();
+                var measureThreshold = parseFloat($('#measure').val());
+
+
+                if (sensorName && selectedDate && halfDayOption) {
+
+                    if (halfDayOption === 'first-half') {
+                         startDate.setHours(0, 0, 0);
+                         startDate.setDate(startDate.getDate()+1);
+                         endDate = new Date(startDate); // Clone startDate to avoid reference
+                         endDate.setHours(11, 59, 59);
+                    } else if (halfDayOption === 'second-half') {
+                        startDate.setHours(12, 0, 0);
+                        startDate.setDate(startDate.getDate()+1);
+                        endDate = new Date(startDate); // Clone startDate to avoid reference
+                        endDate.setHours(23, 59, 59);
+                    }else {
+                        startDate.setHours(0, 0, 0);
+                        endDate.setHours(23, 59, 59);
+                    }
+                     var startUnixtime = Math.floor(startDate.getTime() / 1000);
+                     var endUnixtime = Math.floor(endDate.getTime() / 1000);
+
+                    fetchData(sensorName, startUnixtime, endUnixtime, measureThreshold);
+                }
+            }
+            
+            // Apply filter button click event
+            $('#filter-button').click(filterData);
+
+            // Apply chart update every 5 seconds
+            setInterval(updateData, 5000);
 
             // Clear filter button click event
             $('#clear-button').click(function() {
@@ -136,7 +206,34 @@
                 chart.data.datasets[0].data = [];
                 chart.update();
             });
+
+            // Download data button click event
+            $('#download-button').click(function() {
+                dataJSON = JSON.parse(downloadDataJSON);
+                console.log(dataJSON);
+
+                const estacion = document.querySelector('#sensor-name').value;
+                const fecha_datos = document.querySelector('#selected-date').value;
+                const mitad = $('#half-day').val();
+                const file_name = estacion+"-"+fecha_datos+"-"+mitad+".csv";
+
+
+                /* generate worksheet and workbook */
+                const worksheet = XLSX.utils.json_to_sheet(dataJSON);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "WaterMeasurement");
+
+                /* fix headers */
+                XLSX.utils.sheet_add_aoa(worksheet, [["station", "time", "waterMeasured"]], { origin: "A1" });
+
+
+                /* create an XLSX file and try to save to Presidents.xlsx */
+                XLSX.writeFile(workbook, file_name, { compression: true });
+
+            });
+
         });
     </script>
 </body>
 </html>
+
